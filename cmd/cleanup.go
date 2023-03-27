@@ -31,12 +31,6 @@ var cleanupCmd = &cobra.Command{
 
 		if !dead {
 			log.Println("Stopping allocation...")
-			logs, err := nomad.GetTaskLogs(alloc, "job", "stdout")
-			if err != nil {
-				return err
-			}
-			log.Println("Using job shell " + logs)
-
 			nomad.Exec(alloc, "job", []string{
 				"sh",
 				"-c",

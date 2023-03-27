@@ -39,16 +39,24 @@ var prepareCmd = &cobra.Command{
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := "test"
-		region := "global"
-		namespace := "default"
 		datacenters := []string{"dc1"}
-		image := "debian:latest"
+
+		driver := "docker"
+		connect := true
 
 		helper_image := "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:alpine-latest-x86_64-v15.10.0"
+
+		// Extract job parameters from GitLab Runner-provided environment.
+
+		image := os.Getenv("CUSTOM_ENV_CI_JOB_IMAGE")
+		if image == "" {
+			return fmt.Errorf("could not extract image from environment")
+		}
 
 		var services []internals.JobService
 		env_services := os.Getenv("CUSTOM_ENV_CI_JOB_SERVICES")
 		if env_services != "" {
+			log.Println("With services")
 			err := json.Unmarshal([]byte(env_services), &services)
 			if err != nil {
 				return err
@@ -60,6 +68,7 @@ var prepareCmd = &cobra.Command{
 		auths := map[string]*internals.DockerAuth{}
 		env_registry := os.Getenv("CUSTOM_ENV_CI_REGISTRY")
 		if env_registry != "" {
+			log.Println("With CI registry auth")
 			user := os.Getenv("CUSTOM_ENV_CI_REGISTRY_USER")
 			password := os.Getenv("CUSTOM_ENV_CI_REGISTRY_PASSWORD")
 			if user == "" || password == "" {
@@ -72,6 +81,7 @@ var prepareCmd = &cobra.Command{
 		}
 		env_dependency_proxy := os.Getenv("CUSTOM_ENV_CI_DEPENDENCY_PROXY_SERVER")
 		if env_dependency_proxy != "" {
+			log.Println("With Dependency Proxy auth")
 			user := os.Getenv("CUSTOM_ENV_CI_DEPENDENCY_PROXY_USER")
 			password := os.Getenv("CUSTOM_ENV_CI_DEPENDENCY_PROXY_PASSWORD")
 			if user == "" || password == "" {
@@ -83,8 +93,9 @@ var prepareCmd = &cobra.Command{
 			}
 		}
 
-		env_docker_auth_config := os.Getenv("DOCKER_AUTH_CONFIG")
+		env_docker_auth_config := os.Getenv("CUSTOM_ENV_DOCKER_AUTH_CONFIG")
 		if env_docker_auth_config != "" {
+			log.Println("With Docker auth config")
 			var docker_auth_config internals.DockerAuthConfig
 			err := json.Unmarshal([]byte(env_docker_auth_config), &docker_auth_config)
 			if err != nil {
@@ -97,7 +108,7 @@ var prepareCmd = &cobra.Command{
 				}
 				username, password, found := strings.Cut(string(auth_decoded[:]), ":")
 				if !found {
-					return fmt.Errorf("invalid auth")
+					return fmt.Errorf("invalid docker auth config")
 				}
 				auths[server] = &internals.DockerAuth{
 					Username: username,
@@ -106,11 +117,11 @@ var prepareCmd = &cobra.Command{
 			}
 		}
 
+		// Create Nomad job.
+
 		job_spec := api.Job{
 			ID:          &id,
 			Type:        internals.Ptr("batch"),
-			Region:      &region,
-			Namespace:   &namespace,
 			Datacenters: datacenters,
 			TaskGroups: []*api.TaskGroup{
 				{
@@ -127,30 +138,10 @@ var prepareCmd = &cobra.Command{
 							Mode: "bridge",
 						},
 					},
-					Services: []*api.Service{
-						{
-							Connect: &api.ConsulConnect{
-								SidecarService: &api.ConsulSidecarService{
-									Proxy: &api.ConsulProxy{
-										Upstreams: []*api.ConsulUpstream{
-											{
-												DestinationName: "gitlab-http",
-												LocalBindPort:   50000,
-											},
-											{
-												DestinationName: "gitlab-registry",
-												LocalBindPort:   50002,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
 					Tasks: []*api.Task{
 						{
 							Name:   "job",
-							Driver: "docker",
+							Driver: driver,
 							Leader: true,
 							Config: map[string]interface{}{
 								"image":   image,
@@ -170,7 +161,7 @@ var prepareCmd = &cobra.Command{
 						},
 						{
 							Name:   "helper",
-							Driver: "docker",
+							Driver: driver,
 							Config: map[string]interface{}{
 								"image":   helper_image,
 								"command": "sh",
@@ -193,6 +184,32 @@ var prepareCmd = &cobra.Command{
 			},
 		}
 
+		// TODO: allow custom mounts
+		// TODO: allow custom upstreams
+		if connect {
+			job_spec.TaskGroups[0].Services = []*api.Service{
+				{
+					Connect: &api.ConsulConnect{
+						SidecarService: &api.ConsulSidecarService{
+							Proxy: &api.ConsulProxy{
+								Upstreams: []*api.ConsulUpstream{
+									{
+										DestinationName: "gitlab-http",
+										LocalBindPort:   50000,
+									},
+									{
+										DestinationName: "gitlab-registry",
+										LocalBindPort:   50002,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+		}
+
+		// Add additionnal task for each CI service.
 		for _, service := range services {
 			// Crappy code to convert the service command to the docker driver command
 			var command *string
@@ -209,7 +226,7 @@ var prepareCmd = &cobra.Command{
 			}
 			job_spec.TaskGroups[0].AddTask(&api.Task{
 				Name:   service.Name,
-				Driver: "docker",
+				Driver: driver,
 				Config: map[string]interface{}{
 					"image":      service.Name,
 					"entrypoint": service.Entrypoint,

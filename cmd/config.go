@@ -2,25 +2,24 @@ package cmd
 
 import (
 	"encoding/json"
+	"nomad-gitlab-runner-executor/internals"
 	"os"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/gitlab-org/gitlab-runner/executors/custom/api"
 )
+
+var nomadConfig = internals.NomadConfig{}
 
 var configCmd = &cobra.Command{
 	Use:          "config",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		builds_dir := "/builds/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")
-		cache_dir := "/cache/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")
-		builds_dir_is_shared := false
-
-		config := api.ConfigExecOutput{
-			BuildsDir:         &builds_dir,
-			CacheDir:          &cache_dir,
-			BuildsDirIsShared: &builds_dir_is_shared,
+		config := internals.ConfigExecOutput{
+			BuildsDir:         internals.Ptr("/builds/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")),
+			CacheDir:          internals.Ptr("/cache/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")),
+			BuildsDirIsShared: internals.Ptr(false),
+			JobEnv:            &map[string]string{},
 		}
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(config)
 	},

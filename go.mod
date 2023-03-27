@@ -6,7 +6,6 @@ require (
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/hashicorp/nomad/api v0.0.0-20230324233831-72ad885a4720
 	github.com/spf13/cobra v1.6.1
-	gitlab.com/gitlab-org/gitlab-runner v12.5.0+incompatible
 )
 
 require github.com/opencontainers/go-digest v1.0.0 // indirect

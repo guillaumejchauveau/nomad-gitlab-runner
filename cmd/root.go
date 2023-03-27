@@ -3,6 +3,7 @@ package cmd
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -17,6 +18,10 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
+		failure_code, err := strconv.Atoi(os.Getenv("SYSTEM_FAILURE_EXIT_CODE"))
+		if err == nil {
+			os.Exit(failure_code)
+		}
 		os.Exit(1)
 	}
 }

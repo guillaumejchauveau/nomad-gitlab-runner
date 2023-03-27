@@ -6,9 +6,24 @@ import (
 	"nomad-gitlab-runner-executor/internals"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/hashicorp/nomad/api"
 	"github.com/spf13/cobra"
 )
+
+func getTaskShell(nomad *internals.Nomad, alloc *api.Allocation, task string) (string, error) {
+	for {
+		time.Sleep(time.Second)
+		logs, err := nomad.GetTaskLogs(alloc, task, "stdout")
+		if err != nil {
+			return "", err
+		}
+		if logs != "" {
+			return logs, nil
+		}
+	}
+}
 
 var runCmd = &cobra.Command{
 	Use:          "run",
@@ -49,17 +64,15 @@ var runCmd = &cobra.Command{
 		}
 		log.Println(alloc.ID)
 
-		logs, err := nomad.GetTaskLogs(alloc, target, "stdout")
+		shell, err := getTaskShell(nomad, alloc, target)
 		if err != nil {
 			return err
 		}
-		log.Println("Using " + target + " shell " + logs)
+		log.Println("Using " + target + " shell " + shell)
 
 		code, err := nomad.Exec(alloc, target, []string{
-			"sh",
-			"-c",
-			script,
-		}, strings.NewReader(""), os.Stdout, os.Stderr)
+			shell,
+		}, strings.NewReader(script), os.Stdout, os.Stderr)
 		if err != nil {
 			return err
 		}

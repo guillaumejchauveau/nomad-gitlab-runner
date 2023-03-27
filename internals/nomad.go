@@ -2,30 +2,53 @@ package internals
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"time"
 
 	"github.com/hashicorp/nomad/api"
 )
 
+type NomadConfig struct {
+	Address      string    `json:"address"`
+	SecretIDPath *string   `json:"secret_id_path"`
+	Region       *string   `json:"region"`
+	Namespace    string    `json:"namespace"`
+	Datacenters  *[]string `json:"datacenters"`
+}
+
 type Nomad struct {
+	config NomadConfig
 	client *api.Client
 }
 
 func NewNomadFromEnv() (*Nomad, error) {
-	nomad_address := "http://192.168.56.102:4646"
-	nomad_secret_id := ""
-	config := &api.Config{
-		Address:  nomad_address,
-		SecretID: nomad_secret_id,
+	nomad := Nomad{}
+
+	json.Unmarshal([]byte(os.Getenv("NOMAD_EXECUTOR_CONFIG")), &nomad.config)
+
+	var secret_id string
+	if nomad.config.SecretIDPath != nil {
+		secret_id_data, err := os.ReadFile(*nomad.config.SecretIDPath)
+		if err != nil {
+			return nil, err
+		}
+		secret_id = string(secret_id_data)
 	}
-	client, err := api.NewClient(config)
+	client, err := api.NewClient(&api.Config{
+		Address:   nomad.config.Address,
+		Region:    *nomad.config.Region,
+		SecretID:  secret_id,
+		Namespace: nomad.config.Namespace,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &Nomad{client: client}, nil
+	nomad.client = client
+	return &nomad, nil
 }
 
 func (n *Nomad) ValidateJob(job *api.Job) error {
