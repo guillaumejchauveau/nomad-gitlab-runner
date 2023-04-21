@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/nomad/api"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var find_shell_script = `
@@ -38,13 +39,14 @@ var prepareCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := "test"
-		datacenters := []string{"dc1"}
+		id := viper.GetString("job_id")
+		datacenters := viper.GetStringSlice("datacenters")
+		namespace := viper.GetString("namespace")
 
-		driver := "docker"
-		connect := true
+		driver := viper.GetString("driver")
+		connect := viper.GetBool("connect")
 
-		helper_image := "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:alpine-latest-x86_64-v15.10.0"
+		helper_image := viper.GetString("helper_image")
 
 		// Extract job parameters from GitLab Runner-provided environment.
 
@@ -123,6 +125,7 @@ var prepareCmd = &cobra.Command{
 			ID:          &id,
 			Type:        internals.Ptr("batch"),
 			Datacenters: datacenters,
+			Namespace:   &namespace,
 			TaskGroups: []*api.TaskGroup{
 				{
 					Name: internals.Ptr("job"),

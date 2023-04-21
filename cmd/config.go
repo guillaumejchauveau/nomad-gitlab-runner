@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var nomadConfig = internals.NomadConfig{}
@@ -15,6 +16,8 @@ var configCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		viper.Set
+
 		config := internals.ConfigExecOutput{
 			BuildsDir:         internals.Ptr("/builds/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")),
 			CacheDir:          internals.Ptr("/cache/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")),
