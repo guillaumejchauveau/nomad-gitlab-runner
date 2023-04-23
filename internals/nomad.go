@@ -2,53 +2,69 @@ package internals
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/nomad/api"
+	"github.com/spf13/viper"
 )
 
-type NomadConfig struct {
-	Address      string    `json:"address"`
-	SecretIDPath *string   `json:"secret_id_path"`
-	Region       *string   `json:"region"`
-	Namespace    string    `json:"namespace"`
-	Datacenters  *[]string `json:"datacenters"`
-}
-
 type Nomad struct {
-	config NomadConfig
 	client *api.Client
 }
 
 func NewNomadFromEnv() (*Nomad, error) {
-	nomad := Nomad{}
-
-	json.Unmarshal([]byte(os.Getenv("NOMAD_EXECUTOR_CONFIG")), &nomad.config)
-
-	var secret_id string
-	if nomad.config.SecretIDPath != nil {
-		secret_id_data, err := os.ReadFile(*nomad.config.SecretIDPath)
+	token := viper.GetString("nomad_token")
+	if viper.IsSet("nomad_token_file") {
+		secret_id_data, err := os.ReadFile(viper.GetString("nomad_token_file"))
 		if err != nil {
 			return nil, err
 		}
-		secret_id = string(secret_id_data)
+		token = string(secret_id_data)
+	}
+	address := viper.GetString("nomad_address")
+
+	http_client := cleanhttp.DefaultPooledClient()
+	transport := http_client.Transport.(*http.Transport)
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.TLSClientConfig = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	parts := strings.SplitN(address, "://", 2)
+	if len(parts) == 2 && parts[0] == "unix" {
+		transport.DialContext = func(_ context.Context, _, _ string) (net.Conn, error) {
+			return net.Dial("unix", parts[1])
+		}
+		address = "http://localhost"
+	}
+
+	if err := api.ConfigureTLS(http_client, api.DefaultConfig().TLSConfig); err != nil {
+		return nil, err
 	}
 	client, err := api.NewClient(&api.Config{
-		Address:   nomad.config.Address,
-		Region:    *nomad.config.Region,
-		SecretID:  secret_id,
-		Namespace: nomad.config.Namespace,
+		Address:    address,
+		Region:     viper.GetString("nomad_region"),
+		SecretID:   token,
+		Namespace:  viper.GetString("nomad_namespace"),
+		HttpClient: http_client,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	nomad := new(Nomad)
 	nomad.client = client
-	return &nomad, nil
+
+	return nomad, nil
 }
 
 func (n *Nomad) ValidateJob(job *api.Job) error {

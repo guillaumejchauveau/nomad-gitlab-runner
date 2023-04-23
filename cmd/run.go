@@ -2,14 +2,15 @@ package cmd
 
 import (
 	"fmt"
+	"giruno/internals"
 	"log"
-	"nomad-gitlab-runner-executor/internals"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/hashicorp/nomad/api"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func getTaskShell(nomad *internals.Nomad, alloc *api.Allocation, task string) (string, error) {
@@ -30,6 +31,11 @@ var runCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !viper.IsSet("job_id") {
+			return fmt.Errorf("no Nomad Job ID set")
+		}
+		id := viper.GetString("job_id")
+
 		script_data, err := os.ReadFile(args[0])
 		if err != nil {
 			return err
@@ -45,8 +51,6 @@ var runCmd = &cobra.Command{
 		default:
 			target = "job"
 		}
-
-		id := "test"
 
 		log.Println("Creating client...")
 		nomad, err := internals.NewNomadFromEnv()
@@ -71,13 +75,13 @@ var runCmd = &cobra.Command{
 		log.Println("Using " + target + " shell " + shell)
 
 		code, err := nomad.Exec(alloc, target, []string{
-			shell,
+			strings.Trim(shell, " \n\t\r"),
 		}, strings.NewReader(script), os.Stdout, os.Stderr)
 		if err != nil {
 			return err
 		}
 		if code != 0 {
-			return fmt.Errorf("command exited with code %v", code)
+			return internals.BuildError(code)
 		}
 		return nil
 	},
@@ -85,4 +89,5 @@ var runCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(runCmd)
+	viper.MustBindEnv("job_id")
 }

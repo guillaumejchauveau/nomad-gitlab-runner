@@ -1,6 +1,6 @@
 package main
 
-import "nomad-gitlab-runner-executor/cmd"
+import "giruno/cmd"
 
 func main() {
 	cmd.Execute()

@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"nomad-gitlab-runner-executor/internals"
+	"giruno/internals"
 
 	"github.com/hashicorp/nomad/api"
 	"github.com/spf13/cobra"
@@ -17,36 +17,39 @@ import (
 
 var find_shell_script = `
 if [ -x /usr/local/bin/bash ]; then
-	echo /usr/local/bin/bash
+	echo "/usr/local/bin/bash"
 elif [ -x /usr/bin/bash ]; then
-	echo /usr/bin/bash
+	echo "/usr/bin/bash"
 elif [ -x /bin/bash ]; then
-	echo /bin/bash
+	echo "/bin/bash"
 elif [ -x /usr/local/bin/sh ]; then
-	echo /usr/local/bin/sh
+	echo "/usr/local/bin/sh"
 elif [ -x /usr/bin/sh ]; then
-	echo /usr/bin/sh
+	echo "/usr/bin/sh"
 elif [ -x /bin/sh ]; then
-	echo /bin/sh
+	echo "/bin/sh"
 elif [ -x /busybox/sh ]; then
-	echo /busybox/sh
+	echo "/busybox/sh"
 else
 	exit 1
 fi;`
+
+var default_helper_image = "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:alpine-latest-x86_64-v15.10.0"
+
+var datacenter string
+var driver string
+var connect bool
+var helper_image string
 
 var prepareCmd = &cobra.Command{
 	Use:          "prepare",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !viper.IsSet("job_id") {
+			return fmt.Errorf("no Nomad Job ID set")
+		}
 		id := viper.GetString("job_id")
-		datacenters := viper.GetStringSlice("datacenters")
-		namespace := viper.GetString("namespace")
-
-		driver := viper.GetString("driver")
-		connect := viper.GetBool("connect")
-
-		helper_image := viper.GetString("helper_image")
 
 		// Extract job parameters from GitLab Runner-provided environment.
 
@@ -124,8 +127,7 @@ var prepareCmd = &cobra.Command{
 		job_spec := api.Job{
 			ID:          &id,
 			Type:        internals.Ptr("batch"),
-			Datacenters: datacenters,
-			Namespace:   &namespace,
+			Datacenters: []string{datacenter},
 			TaskGroups: []*api.TaskGroup{
 				{
 					Name: internals.Ptr("job"),
@@ -135,11 +137,6 @@ var prepareCmd = &cobra.Command{
 					ReschedulePolicy: &api.ReschedulePolicy{
 						Attempts:  internals.Ptr(0),
 						Unlimited: internals.Ptr(false),
-					},
-					Networks: []*api.NetworkResource{
-						{
-							Mode: "bridge",
-						},
 					},
 					Tasks: []*api.Task{
 						{
@@ -190,6 +187,11 @@ var prepareCmd = &cobra.Command{
 		// TODO: allow custom mounts
 		// TODO: allow custom upstreams
 		if connect {
+			job_spec.TaskGroups[0].Networks = []*api.NetworkResource{
+				{
+					Mode: "bridge",
+				},
+			}
 			job_spec.TaskGroups[0].Services = []*api.Service{
 				{
 					Connect: &api.ConsulConnect{
@@ -273,4 +275,10 @@ var prepareCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(prepareCmd)
+
+	prepareCmd.PersistentFlags().StringVar(&datacenter, "datacenter", "dc1", "Task datacenter")
+	prepareCmd.PersistentFlags().StringVar(&driver, "driver", "docker", "Task driver")
+	prepareCmd.PersistentFlags().BoolVar(&connect, "connect", false, "Use Consul Connect")
+	prepareCmd.PersistentFlags().StringVar(&helper_image, "helper_image", default_helper_image, "Helper image")
+	viper.MustBindEnv("job_id")
 }

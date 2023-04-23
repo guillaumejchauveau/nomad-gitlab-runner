@@ -1,4 +1,4 @@
-module nomad-gitlab-runner-executor
+module giruno
 
 go 1.20
 
@@ -7,6 +7,7 @@ require (
 	github.com/hashicorp/nomad/api v0.0.0-20230421025320-b4e6a70fe69b
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
+  github.com/peterbourgon/unixtransport v0.0.2
 )
 
 require github.com/opencontainers/go-digest v1.0.0 // indirect

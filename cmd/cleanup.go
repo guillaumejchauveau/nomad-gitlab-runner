@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"fmt"
+	"giruno/internals"
 	"log"
-	"nomad-gitlab-runner-executor/internals"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var cleanupCmd = &cobra.Command{
@@ -14,7 +16,10 @@ var cleanupCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := "test"
+		if !viper.IsSet("job_id") {
+			return fmt.Errorf("no Nomad Job ID set")
+		}
+		id := viper.GetString("job_id")
 
 		log.Println("Creating client...")
 		nomad, err := internals.NewNomadFromEnv()
@@ -45,4 +50,5 @@ var cleanupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(cleanupCmd)
+	viper.MustBindEnv("job_id")
 }

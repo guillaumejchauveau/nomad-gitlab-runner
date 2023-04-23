@@ -1,5 +1,13 @@
 package internals
 
+import "fmt"
+
+type BuildError int
+
+func (e BuildError) Error() string {
+	return fmt.Sprintf("build error: %d", e)
+}
+
 type JobService struct {
 	Name       string    `json:"name"`
 	Alias      string    `json:"alias"`
