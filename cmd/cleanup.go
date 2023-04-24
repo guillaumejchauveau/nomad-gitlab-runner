@@ -21,6 +21,8 @@ var cleanupCmd = &cobra.Command{
 		}
 		id := viper.GetString("job_id")
 
+		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
+
 		log.Println("Creating client...")
 		nomad, err := internals.NewNomadFromEnv()
 		if err != nil {

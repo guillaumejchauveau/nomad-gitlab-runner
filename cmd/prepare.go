@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"giruno/internals"
@@ -31,6 +32,7 @@ elif [ -x /bin/sh ]; then
 elif [ -x /busybox/sh ]; then
 	echo "/busybox/sh"
 else
+	echo "Could not find compatible shell"
 	exit 1
 fi;`
 
@@ -38,8 +40,10 @@ var default_helper_image = "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-
 
 var datacenter string
 var driver string
-var connect bool
+var upstreams []string
+var mounts []string
 var helper_image string
+var default_image string
 
 var prepareCmd = &cobra.Command{
 	Use:          "prepare",
@@ -47,7 +51,7 @@ var prepareCmd = &cobra.Command{
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !viper.IsSet("job_id") {
-			return fmt.Errorf("no Nomad Job ID set")
+			return fmt.Errorf("No Nomad job ID set")
 		}
 		id := viper.GetString("job_id")
 
@@ -55,7 +59,7 @@ var prepareCmd = &cobra.Command{
 
 		image := os.Getenv("CUSTOM_ENV_CI_JOB_IMAGE")
 		if image == "" {
-			return fmt.Errorf("could not extract image from environment")
+			image = default_image
 		}
 
 		var services []internals.JobService
@@ -123,6 +127,7 @@ var prepareCmd = &cobra.Command{
 		}
 
 		// Create Nomad job.
+		// TODO: pull policy ? id_tokens ? secrets ?
 
 		job_spec := api.Job{
 			ID:          &id,
@@ -145,6 +150,7 @@ var prepareCmd = &cobra.Command{
 							Leader: true,
 							Config: map[string]interface{}{
 								"image":   image,
+								// TODO "entrypoint": ???,
 								"command": "sh",
 								"args": []string{
 									"${NOMAD_TASK_DIR}/command.sh",
@@ -168,12 +174,11 @@ var prepareCmd = &cobra.Command{
 								"args": []string{
 									"${NOMAD_TASK_DIR}/command.sh",
 								},
-								"auth":        auths[internals.DockerImageDomain(helper_image)].ToDriverConfig(),
-								"interactive": true,
+								"auth": auths[internals.DockerImageDomain(helper_image)].ToDriverConfig(),
 							},
 							Templates: []*api.Template{
 								{
-									EmbeddedTmpl: internals.Ptr(find_shell_script + "read _;"),
+									EmbeddedTmpl: internals.Ptr(find_shell_script + "mkfifo /tmp/stop_task; read _ < /tmp/stop_task;"),
 									DestPath:     internals.Ptr("local/command.sh"),
 									Perms:        internals.Ptr("755"),
 								},
@@ -184,29 +189,36 @@ var prepareCmd = &cobra.Command{
 			},
 		}
 
-		// TODO: allow custom mounts
-		// TODO: allow custom upstreams
-		if connect {
+		if len(upstreams) > 0 {
 			job_spec.TaskGroups[0].Networks = []*api.NetworkResource{
 				{
 					Mode: "bridge",
 				},
 			}
+
+			consul_upstreams := []*api.ConsulUpstream{}
+
+			for _, upstream := range upstreams {
+				parts := strings.Split(upstream, ":")
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid upstream: %s", upstream)
+				}
+				local_bind_port, err := strconv.Atoi(parts[1])
+				if err != nil {
+					return fmt.Errorf("invalid upstream port: %s", upstream)
+				}
+				consul_upstreams = append(consul_upstreams, &api.ConsulUpstream{
+					DestinationName: parts[0],
+					LocalBindPort:   local_bind_port,
+				})
+			}
+
 			job_spec.TaskGroups[0].Services = []*api.Service{
 				{
 					Connect: &api.ConsulConnect{
 						SidecarService: &api.ConsulSidecarService{
 							Proxy: &api.ConsulProxy{
-								Upstreams: []*api.ConsulUpstream{
-									{
-										DestinationName: "gitlab-http",
-										LocalBindPort:   50000,
-									},
-									{
-										DestinationName: "gitlab-registry",
-										LocalBindPort:   50002,
-									},
-								},
+								Upstreams: consul_upstreams,
 							},
 						},
 					},
@@ -241,6 +253,8 @@ var prepareCmd = &cobra.Command{
 				},
 			})
 		}
+
+		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
 
 		log.Println("Creating client...")
 		nomad, err := internals.NewNomadFromEnv()
@@ -278,7 +292,9 @@ func init() {
 
 	prepareCmd.PersistentFlags().StringVar(&datacenter, "datacenter", "dc1", "Task datacenter")
 	prepareCmd.PersistentFlags().StringVar(&driver, "driver", "docker", "Task driver")
-	prepareCmd.PersistentFlags().BoolVar(&connect, "connect", false, "Use Consul Connect")
+	prepareCmd.PersistentFlags().StringSliceVar(&upstreams, "upstream", []string{}, "Consul Connect upstream")
+	prepareCmd.PersistentFlags().StringSliceVar(&mounts, "mount", []string{}, "Nomad Docker mount")
 	prepareCmd.PersistentFlags().StringVar(&helper_image, "helper_image", default_helper_image, "Helper image")
+	prepareCmd.PersistentFlags().StringVar(&default_image, "default_image", "ubuntu", "Default job image")
 	viper.MustBindEnv("job_id")
 }

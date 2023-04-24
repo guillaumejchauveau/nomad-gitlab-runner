@@ -4,10 +4,10 @@ go 1.20
 
 require (
 	github.com/docker/distribution v2.8.1+incompatible
+	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/nomad/api v0.0.0-20230421025320-b4e6a70fe69b
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
-  github.com/peterbourgon/unixtransport v0.0.2
 )
 
 require github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -17,7 +17,6 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/cronexpr v1.1.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"giruno/internals"
 	"os"
+	"path"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -21,17 +22,14 @@ var configCmd = &cobra.Command{
 			os.Getenv("CUSTOM_ENV_CI_CONCURRENT_PROJECT_ID"))
 
 		settings := map[string]string{
-			"GIRUNO_JOB_ID":    id,
-			"NOMAD_ADDR":       viper.GetString("nomad_address"),
-			"NOMAD_TOKEN":      viper.GetString("nomad_token"),
-			"NOMAD_TOKEN_FILE": viper.GetString("nomad_token_file"),
-			"NOMAD_REGION":     viper.GetString("nomad_region"),
-			"NOMAD_NAMESPACE":  viper.GetString("nomad_namespace"),
+			"GIRUNO_JOB_ID": id,
 		}
 
+		data_dir := viper.GetString("nomad.alloc_data_dir")
+		project_path := os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")
 		config := internals.ConfigExecOutput{
-			BuildsDir:         internals.Ptr(data_dir + "/builds/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")),
-			CacheDir:          internals.Ptr(data_dir + "/cache/" + os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")),
+			BuildsDir:         internals.Ptr(path.Join(data_dir, "builds", project_path)),
+			CacheDir:          internals.Ptr(path.Join(data_dir, "cache", project_path)),
 			BuildsDirIsShared: internals.Ptr(false),
 			JobEnv:            &settings,
 		}
@@ -39,10 +37,6 @@ var configCmd = &cobra.Command{
 	},
 }
 
-var data_dir string
-
 func init() {
 	rootCmd.AddCommand(configCmd)
-
-	prepareCmd.PersistentFlags().StringVar(&data_dir, "data_dir", "", "Build data directory")
 }

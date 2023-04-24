@@ -13,19 +13,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-func getTaskShell(nomad *internals.Nomad, alloc *api.Allocation, task string) (string, error) {
-	for {
-		time.Sleep(time.Second)
-		logs, err := nomad.GetTaskLogs(alloc, task, "stdout")
-		if err != nil {
-			return "", err
-		}
-		if logs != "" {
-			return logs, nil
-		}
-	}
-}
-
 var runCmd = &cobra.Command{
 	Use:          "run",
 	Args:         cobra.ExactArgs(2),
@@ -52,6 +39,8 @@ var runCmd = &cobra.Command{
 			target = "job"
 		}
 
+		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
+
 		log.Println("Creating client...")
 		nomad, err := internals.NewNomadFromEnv()
 		if err != nil {
@@ -68,14 +57,21 @@ var runCmd = &cobra.Command{
 		}
 		log.Println(alloc.ID)
 
-		shell, err := getTaskShell(nomad, alloc, target)
-		if err != nil {
-			return err
+		var shell string
+		for {
+			time.Sleep(time.Second)
+			logs, err := nomad.GetTaskLogs(alloc, target, "stdout")
+			if err != nil {
+				return err
+			}
+			if logs != "" {
+				shell = strings.Trim(logs, " \n\t\r")
+			}
 		}
 		log.Println("Using " + target + " shell " + shell)
 
 		code, err := nomad.Exec(alloc, target, []string{
-			strings.Trim(shell, " \n\t\r"),
+			shell,
 		}, strings.NewReader(script), os.Stdout, os.Stderr)
 		if err != nil {
 			return err

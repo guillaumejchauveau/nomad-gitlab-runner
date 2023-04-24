@@ -12,16 +12,28 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use: "giruno",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) {
 		log.SetOutput(cmd.ErrOrStderr())
+
+		err := viper.ReadInConfig()
+		if err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+				// Config file not found; ignore error if desired
+			} else {
+				return fmt.Errorf("fatal error config file: %w", err)
+			}
+		}
 	},
 }
 
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
+		// https://docs.gitlab.com/runner/executors/custom.html#error-handling
 		failure_code, env_err := strconv.Atoi(os.Getenv("SYSTEM_FAILURE_EXIT_CODE"))
 		if _, ok := err.(*internals.BuildError); ok {
+			// Is the custom executor incompatible with allow_failure:exit_codes ?
+			// https://docs.gitlab.com/ee/ci/yaml/#allow_failureexit_codes
 			failure_code, env_err = strconv.Atoi(os.Getenv("BUILD_FAILURE_EXIT_CODE"))
 		}
 		if env_err == nil {
@@ -31,31 +43,19 @@ func Execute() {
 	}
 }
 
-var nomad_addr string
-var nomad_token string
-var nomad_token_file string
-var nomad_region string
-var nomad_namespace string
 
 func init() {
 	viper.SetEnvPrefix("GIRUNO")
-	configCmd.PersistentFlags().StringVar(&nomad_addr, "address", "http://127.0.0.1:4646", "Nomad address")
-	viper.BindPFlag("nomad_address", configCmd.PersistentFlags().Lookup("address"))
-	viper.MustBindEnv("nomad_address", "NOMAD_ADDR")
+	viper.SetConfigName("giruno")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("/etc/giruno/")
 
-	configCmd.PersistentFlags().StringVar(&nomad_token, "token", "", "Nomad token")
-	viper.BindPFlag("nomad_token", configCmd.PersistentFlags().Lookup("token"))
-	viper.MustBindEnv("nomad_token", "NOMAD_TOKEN")
+	viper.SetDefault("nomad.address", "http://127.0.0.1:4646")
+	viper.SetDefault("nomad.namespace", "default")
 
-	configCmd.PersistentFlags().StringVar(&nomad_token_file, "token_file", "", "Nomad token file")
-	viper.BindPFlag("nomad_token_file", configCmd.PersistentFlags().Lookup("token_file"))
-	viper.MustBindEnv("nomad_token_file", "NOMAD_TOKEN_FILE")
-
-	configCmd.PersistentFlags().StringVar(&nomad_region, "region", "", "Nomad region")
-	viper.BindPFlag("nomad_region", configCmd.PersistentFlags().Lookup("region"))
-	viper.MustBindEnv("nomad_region", "NOMAD_REGION")
-
-	configCmd.PersistentFlags().StringVar(&nomad_namespace, "namespace", "default", "Nomad namespace")
-	viper.BindPFlag("nomad_namespace", configCmd.PersistentFlags().Lookup("namespace"))
-	viper.MustBindEnv("nomad_namespace", "NOMAD_NAMESPACE")
+	viper.MustBindEnv("nomad.address", "NOMAD_ADDR")
+	viper.MustBindEnv("nomad.token", "NOMAD_TOKEN")
+	viper.MustBindEnv("nomad.token_file", "NOMAD_TOKEN_FILE")
+	viper.MustBindEnv("nomad.region", "NOMAD_REGION")
+	viper.MustBindEnv("nomad.namespace", "NOMAD_NAMESPACE")
 }
