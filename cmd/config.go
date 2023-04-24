@@ -22,10 +22,10 @@ var configCmd = &cobra.Command{
 			os.Getenv("CUSTOM_ENV_CI_CONCURRENT_PROJECT_ID"))
 
 		settings := map[string]string{
-			"GIRUNO_JOB_ID": id,
+			"JOB_ENV_ID": id,
 		}
 
-		data_dir := viper.GetString("nomad.alloc_data_dir")
+		data_dir := viper.GetString("job.alloc_data_dir")
 		project_path := os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")
 		config := internals.ConfigExecOutput{
 			BuildsDir:         internals.Ptr(path.Join(data_dir, "builds", project_path)),

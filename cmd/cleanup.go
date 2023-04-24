@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cleanupCmd = &cobra.Command{
@@ -16,10 +15,10 @@ var cleanupCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !viper.IsSet("job_id") {
-			return fmt.Errorf("no Nomad Job ID set")
+		id, ok := os.LookupEnv("JOB_ENV_ID")
+		if !ok {
+			return fmt.Errorf("no JOB_ENV_ID set")
 		}
-		id := viper.GetString("job_id")
 
 		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
 
@@ -52,5 +51,4 @@ var cleanupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(cleanupCmd)
-	viper.MustBindEnv("job_id")
 }

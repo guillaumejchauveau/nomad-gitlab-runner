@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"giruno/internals"
 	"log"
 	"os"
@@ -12,8 +13,15 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use: "giruno",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		log.SetOutput(cmd.ErrOrStderr())
+		if cfgFile != "" {
+			// Use config file from the flag.
+			viper.SetConfigFile(cfgFile)
+		} else {
+			viper.AddConfigPath("/etc/giruno/")
+			viper.SetConfigName("giruno")
+		}
 
 		err := viper.ReadInConfig()
 		if err != nil {
@@ -23,6 +31,7 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("fatal error config file: %w", err)
 			}
 		}
+		return nil
 	},
 }
 
@@ -43,15 +52,12 @@ func Execute() {
 	}
 }
 
+var cfgFile string
 
 func init() {
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file")
+	viper.SetConfigType("hcl")
 	viper.SetEnvPrefix("GIRUNO")
-	viper.SetConfigName("giruno")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("/etc/giruno/")
-
-	viper.SetDefault("nomad.address", "http://127.0.0.1:4646")
-	viper.SetDefault("nomad.namespace", "default")
 
 	viper.MustBindEnv("nomad.address", "NOMAD_ADDR")
 	viper.MustBindEnv("nomad.token", "NOMAD_TOKEN")

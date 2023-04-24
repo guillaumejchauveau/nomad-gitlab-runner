@@ -8,9 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/nomad/api"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var runCmd = &cobra.Command{
@@ -18,10 +16,10 @@ var runCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !viper.IsSet("job_id") {
-			return fmt.Errorf("no Nomad Job ID set")
+		id, ok := os.LookupEnv("JOB_ENV_ID")
+		if !ok {
+			return fmt.Errorf("no JOB_ENV_ID set")
 		}
-		id := viper.GetString("job_id")
 
 		script_data, err := os.ReadFile(args[0])
 		if err != nil {
@@ -66,6 +64,7 @@ var runCmd = &cobra.Command{
 			}
 			if logs != "" {
 				shell = strings.Trim(logs, " \n\t\r")
+				break
 			}
 		}
 		log.Println("Using " + target + " shell " + shell)
@@ -85,5 +84,4 @@ var runCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-	viper.MustBindEnv("job_id")
 }
