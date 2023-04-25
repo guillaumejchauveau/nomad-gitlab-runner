@@ -2,15 +2,13 @@ package config
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"text/template"
 
+	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/hashicorp/nomad/api"
-	"github.com/zclconf/go-cty/cty"
-	"github.com/zclconf/go-cty/cty/gocty"
 )
 
 type Config struct {
@@ -29,10 +27,20 @@ type Nomad struct {
 }
 
 type Job struct {
-	Datacenters  []string              `hcl:"datacenters"`
-	AllocDataDir string                `hcl:"alloc_data_dir"`
-	Upstreams    []*api.ConsulUpstream `hcl:"upstreams,block"`
-	TaskTypes    []*TaskType           `hcl:"task,block"`
+	Datacenters  []string       `hcl:"datacenters"`
+	AllocDataDir string         `hcl:"alloc_data_dir"`
+	Upstreams    []*JobUpstream `hcl:"upstreams,block"`
+	TaskTypes    []*TaskType    `hcl:"task,block"`
+}
+
+type JobUpstream struct {
+	DestinationName      string                 `hcl:"destination_name,optional"`
+	DestinationNamespace string                 `hcl:"destination_namespace,optional"`
+	LocalBindPort        int                    `hcl:"local_bind_port,optional"`
+	Datacenter           string                 `hcl:"datacenter,optional"`
+	LocalBindAddress     string                 `hcl:"local_bind_address,optional"`
+	MeshGateway          *api.ConsulMeshGateway `hcl:"mesh_gateway,block"`
+	Config               map[string]any         `hcl:"config,optional"`
 }
 
 type TaskType struct {
@@ -90,6 +98,22 @@ func (j *Job) GetTaskType(task_type string) (*TaskType, error) {
 	return nil, fmt.Errorf("task type '%s' not found", task_type)
 }
 
+func (j *Job) ConsulUpstreams() []*api.ConsulUpstream {
+	var upstreams []*api.ConsulUpstream
+	for _, upstream := range j.Upstreams {
+		upstreams = append(upstreams, &api.ConsulUpstream{
+			DestinationName:      upstream.DestinationName,
+			DestinationNamespace: upstream.DestinationNamespace,
+			LocalBindPort:        upstream.LocalBindPort,
+			Datacenter:           upstream.Datacenter,
+			LocalBindAddress:     upstream.LocalBindAddress,
+			MeshGateway:          upstream.MeshGateway,
+			Config:               upstream.Config,
+		})
+	}
+	return upstreams
+}
+
 func (t *TaskType) DriverConfig(task_data map[string]interface{}) (map[string]interface{}, error) {
 	tmpl, err := template.New("driver_config").Parse(t.ConfigTemplate)
 	if err != nil {
@@ -100,22 +124,18 @@ func (t *TaskType) DriverConfig(task_data map[string]interface{}) (map[string]in
 	if err != nil {
 		return nil, err
 	}
-	raw := map[string]cty.Value{}
-	err = hclsimple.Decode("template.hcl", driver_config_hcl.Bytes(), nil, &raw)
+
+	root, err := hcl.ParseBytes(driver_config_hcl.Bytes())
 	if err != nil {
 		return nil, err
 	}
+	driver_config_hcl.Reset()
+
 	config := map[string]interface{}{}
-	err = gocty.FromCtyValue(raw["args"], &config)
-	if err != nil {
-		panic(err)
-	}
 
-	b, err := json.MarshalIndent(config, "", "  ")
+	err = hcl.DecodeObject(&config, root)
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println(string(b))
 	return config, nil
 }

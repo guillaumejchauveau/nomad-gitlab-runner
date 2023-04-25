@@ -65,7 +65,7 @@ var prepareCmd = &cobra.Command{
 			}
 		}
 
-		registry_auths := map[string]internals.RegistryAuth{}
+		registry_auths := map[string]*internals.RegistryAuth{}
 		env_registry := os.Getenv("CUSTOM_ENV_CI_REGISTRY")
 		if env_registry != "" {
 			log.Println("With CI registry auth")
@@ -74,7 +74,7 @@ var prepareCmd = &cobra.Command{
 			if user == "" || password == "" {
 				return fmt.Errorf("invalid registry auth")
 			}
-			registry_auths[env_registry] = internals.RegistryAuth{
+			registry_auths[env_registry] = &internals.RegistryAuth{
 				Username: user,
 				Password: password,
 			}
@@ -87,7 +87,7 @@ var prepareCmd = &cobra.Command{
 			if user == "" || password == "" {
 				return fmt.Errorf("invalid dependency proxy auth")
 			}
-			registry_auths[env_dependency_proxy] = internals.RegistryAuth{
+			registry_auths[env_dependency_proxy] = &internals.RegistryAuth{
 				Username: user,
 				Password: password,
 			}
@@ -110,7 +110,7 @@ var prepareCmd = &cobra.Command{
 				if !found {
 					return fmt.Errorf("invalid docker auth config")
 				}
-				registry_auths[server] = internals.RegistryAuth{
+				registry_auths[server] = &internals.RegistryAuth{
 					Username: username,
 					Password: password,
 				}
@@ -132,7 +132,7 @@ var prepareCmd = &cobra.Command{
 		}
 		job_task, err := job_task_type.CreateNomadTask(map[string]interface{}{
 			"Image":      image,
-			"ExecScript": "NOMAD_TASK_DIR/exec_script.sh",
+			"ExecScript": "${NOMAD_TASK_DIR}/exec_script.sh",
 			"Auth":       registry_auths[internals.DockerImageDomain(image)],
 		})
 		if err != nil {
@@ -150,7 +150,7 @@ var prepareCmd = &cobra.Command{
 		}
 		helper_task, err := helper_task_type.CreateNomadTask(map[string]interface{}{
 			"Image":      Config.HelperImage,
-			"ExecScript": "NOMAD_TASK_DIR/exec_script.sh",
+			"ExecScript": "${NOMAD_TASK_DIR}/exec_script.sh",
 			"Auth":       registry_auths[internals.DockerImageDomain(Config.HelperImage)],
 		})
 		if err != nil {
@@ -213,20 +213,13 @@ var prepareCmd = &cobra.Command{
 					Connect: &api.ConsulConnect{
 						SidecarService: &api.ConsulSidecarService{
 							Proxy: &api.ConsulProxy{
-								Upstreams: Config.Job.Upstreams,
+								Upstreams: Config.Job.ConsulUpstreams(),
 							},
 						},
 					},
 				},
 			}
 		}
-		/*
-			b, err := json.MarshalIndent(job_spec, "", "  ")
-			if err != nil {
-				return err
-			}
-
-			fmt.Println(string(b))*/
 
 		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
 

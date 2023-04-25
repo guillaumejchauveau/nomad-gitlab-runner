@@ -9,7 +9,7 @@ helper_image = "registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helpe
 
 job {
   datacenters = ["dc1"]
-  alloc_data_dir = "..."
+  alloc_data_dir = "/alloc/data"
 
   upstreams {
     destination_name = "gitlab-http"
@@ -23,10 +23,12 @@ job {
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
+      {{if .Auth }}
       auth = {
         username = "{{.Auth.Username}}"
         password = "{{.Auth.Password}}"
       }
+      {{end}}
       EOT
   }
 
@@ -37,10 +39,12 @@ job {
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
+      {{if .Auth }}
       auth = {
         username = "{{.Auth.Username}}"
         password = "{{.Auth.Password}}"
       }
+      {{end}}
       EOT
   }
 
@@ -64,10 +68,12 @@ job {
       entrypoint = "{{.Service.Entrypoint}}"
       command = ""
       args = []
+      {{if .Auth }}
       auth = {
         username = "{{.Auth.Username}}"
         password = "{{.Auth.Password}}"
       }
+      {{end}}
       EOT
   }
 }
