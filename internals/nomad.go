@@ -4,33 +4,29 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"giruno/config"
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/nomad/api"
-	"github.com/spf13/viper"
 )
+
+type RegistryAuth struct {
+	Username string
+	Password string
+}
 
 type Nomad struct {
 	client *api.Client
 }
 
-func NewNomadFromEnv() (*Nomad, error) {
-	token := viper.GetString("nomad_token")
-	if viper.IsSet("nomad_token_file") {
-		secret_id_data, err := os.ReadFile(viper.GetString("nomad_token_file"))
-		if err != nil {
-			return nil, err
-		}
-		token = string(secret_id_data)
-	}
-	address := viper.GetString("nomad_address")
+func NewNomad(Config config.Config) (*Nomad, error) {
+	address := Config.Nomad.Address
 
 	http_client := cleanhttp.DefaultPooledClient()
 	transport := http_client.Transport.(*http.Transport)
@@ -52,9 +48,9 @@ func NewNomadFromEnv() (*Nomad, error) {
 	}
 	client, err := api.NewClient(&api.Config{
 		Address:    address,
-		Region:     viper.GetString("nomad_region"),
-		SecretID:   token,
-		Namespace:  viper.GetString("nomad_namespace"),
+		Region:     Config.Nomad.Region,
+		SecretID:   Config.Nomad.Token,
+		Namespace:  Config.Nomad.Namespace,
 		HttpClient: http_client,
 	})
 	if err != nil {

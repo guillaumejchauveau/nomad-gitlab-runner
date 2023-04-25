@@ -3,12 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"giruno/gitlab"
 	"giruno/internals"
 	"os"
 	"path"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var configCmd = &cobra.Command{
@@ -25,11 +25,10 @@ var configCmd = &cobra.Command{
 			"JOB_ENV_ID": id,
 		}
 
-		data_dir := viper.GetString("job.alloc_data_dir")
 		project_path := os.Getenv("CUSTOM_ENV_CI_PROJECT_PATH")
-		config := internals.ConfigExecOutput{
-			BuildsDir:         internals.Ptr(path.Join(data_dir, "builds", project_path)),
-			CacheDir:          internals.Ptr(path.Join(data_dir, "cache", project_path)),
+		config := gitlab.ConfigExecOutput{
+			BuildsDir:         internals.Ptr(path.Join(Config.Job.AllocDataDir, "builds", project_path)),
+			CacheDir:          internals.Ptr(path.Join(Config.Job.AllocDataDir, "cache", project_path)),
 			BuildsDirIsShared: internals.Ptr(false),
 			JobEnv:            &settings,
 		}

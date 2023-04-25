@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
+	"giruno/gitlab"
 	"giruno/internals"
 
 	"github.com/hashicorp/nomad/api"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var exec_script = `
@@ -47,41 +47,15 @@ var prepareCmd = &cobra.Command{
 		if !ok {
 			return fmt.Errorf("no JOB_ENV_ID set")
 		}
-		datacenters := viper.GetStringSlice("job.datacenters")
-
-		var job_config_task internals.ConfigTask
-		err := viper.UnmarshalKey("job.task.job", &job_config_task)
-		if err != nil {
-			return err
-		}
-
-		helper_image := viper.GetString("helper_image")
-		var helper_config_task internals.ConfigTask
-		err = viper.UnmarshalKey("job.task.helper", &helper_config_task)
-		if err != nil {
-			return err
-		}
-
-		var service_config_task internals.ConfigTask
-		err = viper.UnmarshalKey("job.task.service", &service_config_task)
-		if err != nil {
-			return err
-		}
-
-		var upstreams []*api.ConsulUpstream
-		err = viper.UnmarshalKey("job.upstreams", &upstreams)
-		if err != nil {
-			return err
-		}
 
 		// Extract job parameters from GitLab Runner-provided environment.
 
 		image := os.Getenv("CUSTOM_ENV_CI_JOB_IMAGE")
 		if image == "" {
-			image = viper.GetString("image")
+			image = Config.DefaultImage
 		}
 
-		services := []internals.GitLabJobService{}
+		services := []gitlab.JobService{}
 		env_services := os.Getenv("CUSTOM_ENV_CI_JOB_SERVICES")
 		if env_services != "" {
 			log.Println("With services")
@@ -91,7 +65,7 @@ var prepareCmd = &cobra.Command{
 			}
 		}
 
-		registry_auths := map[string]*internals.RegistryAuth{}
+		registry_auths := map[string]internals.RegistryAuth{}
 		env_registry := os.Getenv("CUSTOM_ENV_CI_REGISTRY")
 		if env_registry != "" {
 			log.Println("With CI registry auth")
@@ -100,7 +74,7 @@ var prepareCmd = &cobra.Command{
 			if user == "" || password == "" {
 				return fmt.Errorf("invalid registry auth")
 			}
-			registry_auths[env_registry] = &internals.RegistryAuth{
+			registry_auths[env_registry] = internals.RegistryAuth{
 				Username: user,
 				Password: password,
 			}
@@ -113,7 +87,7 @@ var prepareCmd = &cobra.Command{
 			if user == "" || password == "" {
 				return fmt.Errorf("invalid dependency proxy auth")
 			}
-			registry_auths[env_dependency_proxy] = &internals.RegistryAuth{
+			registry_auths[env_dependency_proxy] = internals.RegistryAuth{
 				Username: user,
 				Password: password,
 			}
@@ -122,7 +96,7 @@ var prepareCmd = &cobra.Command{
 		env_docker_auth_config := os.Getenv("CUSTOM_ENV_DOCKER_AUTH_CONFIG")
 		if env_docker_auth_config != "" {
 			log.Println("With Docker auth config")
-			var docker_auth_config internals.GitLabDockerAuthConfig
+			var docker_auth_config gitlab.DockerAuthConfig
 			err := json.Unmarshal([]byte(env_docker_auth_config), &docker_auth_config)
 			if err != nil {
 				return err
@@ -136,7 +110,7 @@ var prepareCmd = &cobra.Command{
 				if !found {
 					return fmt.Errorf("invalid docker auth config")
 				}
-				registry_auths[server] = &internals.RegistryAuth{
+				registry_auths[server] = internals.RegistryAuth{
 					Username: username,
 					Password: password,
 				}
@@ -152,9 +126,13 @@ var prepareCmd = &cobra.Command{
 			Perms:        internals.Ptr("755"),
 		}
 
-		job_task, err := job_config_task.ToNomadTask(map[string]interface{}{
+		job_task_type, err := Config.Job.GetTaskType("job")
+		if err != nil {
+			return err
+		}
+		job_task, err := job_task_type.CreateNomadTask(map[string]interface{}{
 			"Image":      image,
-			"ExecScript": "${NOMAD_TASK_DIR}/exec_script.sh",
+			"ExecScript": "NOMAD_TASK_DIR/exec_script.sh",
 			"Auth":       registry_auths[internals.DockerImageDomain(image)],
 		})
 		if err != nil {
@@ -166,10 +144,14 @@ var prepareCmd = &cobra.Command{
 			&command_file_template,
 		}
 
-		helper_task, err := helper_config_task.ToNomadTask(map[string]interface{}{
-			"Image":      helper_image,
-			"ExecScript": "${NOMAD_TASK_DIR}/exec_script.sh",
-			"Auth":       registry_auths[internals.DockerImageDomain(helper_image)],
+		helper_task_type, err := Config.Job.GetTaskType("helper")
+		if err != nil {
+			return err
+		}
+		helper_task, err := helper_task_type.CreateNomadTask(map[string]interface{}{
+			"Image":      Config.HelperImage,
+			"ExecScript": "NOMAD_TASK_DIR/exec_script.sh",
+			"Auth":       registry_auths[internals.DockerImageDomain(Config.HelperImage)],
 		})
 		if err != nil {
 			return err
@@ -182,7 +164,7 @@ var prepareCmd = &cobra.Command{
 		job_spec := api.Job{
 			ID:          &id,
 			Type:        internals.Ptr("batch"),
-			Datacenters: datacenters,
+			Datacenters: Config.Job.Datacenters,
 			TaskGroups: []*api.TaskGroup{
 				{
 					Name: internals.Ptr("job"),
@@ -202,8 +184,12 @@ var prepareCmd = &cobra.Command{
 		}
 
 		// Add additionnal task for each CI service.
+		service_task_type, err := Config.Job.GetTaskType("service")
+		if err != nil {
+			return err
+		}
 		for _, service := range services {
-			task, err := service_config_task.ToNomadTask(map[string]interface{}{
+			task, err := service_task_type.CreateNomadTask(map[string]interface{}{
 				"Service": service,
 				"Auth":    registry_auths[internals.DockerImageDomain(service.Name)],
 			})
@@ -215,7 +201,7 @@ var prepareCmd = &cobra.Command{
 			job_spec.TaskGroups[0].AddTask(task)
 		}
 
-		if len(upstreams) > 0 {
+		if len(Config.Job.Upstreams) > 0 {
 			job_spec.TaskGroups[0].Networks = []*api.NetworkResource{
 				{
 					Mode: "bridge",
@@ -227,18 +213,25 @@ var prepareCmd = &cobra.Command{
 					Connect: &api.ConsulConnect{
 						SidecarService: &api.ConsulSidecarService{
 							Proxy: &api.ConsulProxy{
-								Upstreams: upstreams,
+								Upstreams: Config.Job.Upstreams,
 							},
 						},
 					},
 				},
 			}
 		}
+		/*
+			b, err := json.MarshalIndent(job_spec, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			fmt.Println(string(b))*/
 
 		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
 
 		log.Println("Creating client...")
-		nomad, err := internals.NewNomadFromEnv()
+		nomad, err := internals.NewNomad(Config)
 		if err != nil {
 			return err
 		}

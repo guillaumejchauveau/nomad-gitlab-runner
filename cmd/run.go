@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"giruno/gitlab"
 	"giruno/internals"
 	"log"
 	"os"
@@ -40,7 +41,7 @@ var runCmd = &cobra.Command{
 		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
 
 		log.Println("Creating client...")
-		nomad, err := internals.NewNomadFromEnv()
+		nomad, err := internals.NewNomad(Config)
 		if err != nil {
 			return err
 		}
@@ -76,7 +77,7 @@ var runCmd = &cobra.Command{
 			return err
 		}
 		if code != 0 {
-			return internals.BuildError(code)
+			return gitlab.BuildError(code)
 		}
 		return nil
 	},

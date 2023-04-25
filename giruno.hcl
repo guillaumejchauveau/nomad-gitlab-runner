@@ -1,6 +1,6 @@
 nomad {
   address = "http://127.0.0.1:4646"
-  token_file = "..."
+  token_file = ""
   namespace = "default"
 }
 
@@ -19,7 +19,7 @@ job {
   task "job" {
     driver = "docker"
 
-    config = <<EOT
+    config = <<-EOT
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
@@ -27,13 +27,13 @@ job {
         username = "{{.Auth.Username}}"
         password = "{{.Auth.Password}}"
       }
-    EOT
+      EOT
   }
 
   task "helper" {
     driver = "docker"
 
-    config = <<EOT
+    config = <<-EOT
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
@@ -41,7 +41,7 @@ job {
         username = "{{.Auth.Username}}"
         password = "{{.Auth.Password}}"
       }
-    EOT
+      EOT
   }
 
   // var command *string
@@ -59,7 +59,7 @@ job {
   task "service" {
     driver = "docker"
 
-    config = <<EOT
+    config = <<-EOT
       image = "{{.Service.Name}}"
       entrypoint = "{{.Service.Entrypoint}}"
       command = ""
@@ -68,6 +68,6 @@ job {
         username = "{{.Auth.Username}}"
         password = "{{.Auth.Password}}"
       }
-    EOT
+      EOT
   }
 }
