@@ -8,7 +8,9 @@ import (
 
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/v2/hclsimple"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/hashicorp/nomad/api"
+	"github.com/zclconf/go-cty/cty/gocty"
 )
 
 type Config struct {
@@ -115,7 +117,26 @@ func (j *Job) ConsulUpstreams() []*api.ConsulUpstream {
 }
 
 func (t *TaskType) DriverConfig(task_data map[string]interface{}) (map[string]interface{}, error) {
-	tmpl, err := template.New("driver_config").Parse(t.ConfigTemplate)
+	tmpl, err := template.
+		New("driver_config").
+		Funcs(template.FuncMap{
+			"hcl": func(v interface{}) (string, error) {
+				valTy, err := gocty.ImpliedType(v)
+				if err != nil {
+					return "", err
+				}
+
+				val, err := gocty.ToCtyValue(v, valTy)
+				if err != nil {
+					// This should never happen, since we should always be able
+					// to decode into the implied type.
+					panic(fmt.Sprintf("failed to encode %T as %#v: %s", v, valTy, err))
+				}
+
+				return string(hclwrite.TokensForValue(val).Bytes()), nil
+			},
+		}).
+		Parse(t.ConfigTemplate)
 	if err != nil {
 		return nil, err
 	}

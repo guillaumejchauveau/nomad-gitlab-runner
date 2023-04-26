@@ -11,10 +11,10 @@ func (e BuildError) Error() string {
 }
 
 type JobService struct {
-	Name       string    `json:"name"`
-	Alias      string    `json:"alias"`
-	Entrypoint *[]string `json:"entrypoint"`
-	Command    *[]string `json:"command"`
+	Name       string   `json:"name"`
+	Alias      string   `json:"alias"`
+	Entrypoint []string `json:"entrypoint"`
+	Command    []string `json:"command"`
 }
 
 type DockerAuthConfig struct {

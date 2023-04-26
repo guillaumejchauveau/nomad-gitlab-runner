@@ -23,12 +23,12 @@ job {
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
-      {{with .Auth }}
+      {{with .Auth -}}
       auth = {
         username = "{{.Username}}"
         password = "{{.Password}}"
       }
-      {{end}}
+      {{end -}}
       EOT
   }
 
@@ -39,12 +39,12 @@ job {
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
-      {{with .Auth }}
+      {{with .Auth -}}
       auth = {
         username = "{{.Username}}"
         password = "{{.Password}}"
       }
-      {{end}}
+      {{end -}}
       EOT
   }
 
@@ -53,23 +53,19 @@ job {
 
     config = <<-EOT
       image = "{{.Service.Name}}"
-      entrypoint = "{{.Service.Entrypoint}}"
-      {{with .Service.Command}}
-      {{if gt len . 0}}
-      command = "{{.[0]}}"
-      args = [
-        {{range slice . 1 }}
-        "{{.}}",
-        {{end}}
-      ]
-      {{end}}
-      {{end}}
-      {{with .Auth }}
+      entrypoint = {{.Service.Entrypoint | hcl}}
+      {{with .Service.Command -}}
+      {{if gt (len .) 0 -}}
+      command = "{{index . 0}}"
+      args = {{slice . 1 | hcl}}
+      {{end -}}
+      {{end -}}
+      {{with .Auth -}}
       auth = {
         username = "{{.Username}}"
         password = "{{.Password}}"
       }
-      {{end}}
+      {{end -}}
       EOT
   }
 }
