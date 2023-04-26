@@ -19,7 +19,7 @@ var configCmd = &cobra.Command{
 		id := fmt.Sprintf("runner-%s-project-%s-concurrent-%s",
 			os.Getenv("CUSTOM_ENV_CI_RUNNER_ID"),
 			os.Getenv("CUSTOM_ENV_CI_PROJECT_ID"),
-			os.Getenv("CUSTOM_ENV_CI_CONCURRENT_PROJECT_ID"))
+			os.Getenv("CUSTOM_ENV_CI_CONCURRENT_ID"))
 
 		settings := map[string]string{
 			"JOB_ENV_ID": id,

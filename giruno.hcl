@@ -23,10 +23,10 @@ job {
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
-      {{if .Auth }}
+      {{with .Auth }}
       auth = {
-        username = "{{.Auth.Username}}"
-        password = "{{.Auth.Password}}"
+        username = "{{.Username}}"
+        password = "{{.Password}}"
       }
       {{end}}
       EOT
@@ -39,39 +39,35 @@ job {
       image = "{{.Image}}"
       command = "sh"
       args = ["{{.ExecScript}}"]
-      {{if .Auth }}
+      {{with .Auth }}
       auth = {
-        username = "{{.Auth.Username}}"
-        password = "{{.Auth.Password}}"
+        username = "{{.Username}}"
+        password = "{{.Password}}"
       }
       {{end}}
       EOT
   }
 
-  // var command *string
-  // var args *[]string
-  // if service.Command != nil {
-  // 	service_command := *service.Command
-  // 	if len(service_command) > 0 {
-  // 		command = &service_command[0]
-  // 		if len(service_command) > 1 {
-  // 			tmp := service_command[1:]
-  // 			args = &tmp
-  // 		}
-  // 	}
-  // }
   task "service" {
     driver = "docker"
 
     config = <<-EOT
       image = "{{.Service.Name}}"
       entrypoint = "{{.Service.Entrypoint}}"
-      command = ""
-      args = []
-      {{if .Auth }}
+      {{with .Service.Command}}
+      {{if gt len . 0}}
+      command = "{{.[0]}}"
+      args = [
+        {{range slice . 1 }}
+        "{{.}}",
+        {{end}}
+      ]
+      {{end}}
+      {{end}}
+      {{with .Auth }}
       auth = {
-        username = "{{.Auth.Username}}"
-        password = "{{.Auth.Password}}"
+        username = "{{.Username}}"
+        password = "{{.Password}}"
       }
       {{end}}
       EOT
