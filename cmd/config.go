@@ -16,10 +16,10 @@ var configCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := fmt.Sprintf("runner-%s-project-%s-concurrent-%s",
+		id := fmt.Sprintf("runner-%s-project-%s-job-%s",
 			os.Getenv("CUSTOM_ENV_CI_RUNNER_ID"),
 			os.Getenv("CUSTOM_ENV_CI_PROJECT_ID"),
-			os.Getenv("CUSTOM_ENV_CI_CONCURRENT_ID"))
+			os.Getenv("CUSTOM_ENV_CI_JOB_ID"))
 
 		settings := map[string]string{
 			"JOB_ENV_ID": id,

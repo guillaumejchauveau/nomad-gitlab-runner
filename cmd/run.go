@@ -6,7 +6,9 @@ import (
 	"giruno/internals"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,22 +33,35 @@ var runCmd = &cobra.Command{
 
 		var target string
 
-		switch stage {
+		if strings.HasPrefix(stage, "step_") || strings.HasSuffix(stage, "_script") {
+			target = "job"
+		} else {
+			target = "helper"
+		}
+
+		/*switch stage {
 		case "get_sources", "restore_cache", "download_artifacts", "archive_cache", "archive_cache_on_failure", "upload_artifacts_on_success", "upload_artifacts_on_failure", "cleanup_file_variables":
 			target = "helper"
 		default:
 			target = "job"
-		}
+		}*/
 
-		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
-
-		log.Println("Creating client...")
+		log.Printf("Running stage '%s'", stage)
 		nomad, err := internals.NewNomad(Config)
 		if err != nil {
 			return err
 		}
 
-		log.Print("Waiting for job allocation... ")
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGTERM)
+
+		go func() {
+			<-c
+			log.Println("Received SIGTERM, exiting")
+			nomad.Cancel()
+		}()
+
+		log.Println("Waiting for job allocation")
 		alloc, dead, err := nomad.WaitForAllocation(id)
 		if dead {
 			return fmt.Errorf("allocation is dead")
@@ -54,7 +69,6 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		log.Println(alloc.ID)
 
 		var shell string
 		for {

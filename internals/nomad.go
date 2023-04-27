@@ -23,6 +23,8 @@ type RegistryAuth struct {
 
 type Nomad struct {
 	client *api.Client
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func NewNomad(Config config.Config) (*Nomad, error) {
@@ -59,12 +61,19 @@ func NewNomad(Config config.Config) (*Nomad, error) {
 
 	nomad := new(Nomad)
 	nomad.client = client
+	nomad.ctx, nomad.cancel = context.WithCancel(context.Background())
 
 	return nomad, nil
 }
 
+func (n *Nomad) Cancel() {
+	n.cancel()
+}
+
 func (n *Nomad) ValidateJob(job *api.Job) error {
-	res, _, err := n.client.Jobs().Validate(job, nil)
+	q := api.WriteOptions{}
+	q.WithContext(n.ctx)
+	res, _, err := n.client.Jobs().Validate(job, &q)
 	if err != nil {
 		return err
 	}
@@ -75,13 +84,17 @@ func (n *Nomad) ValidateJob(job *api.Job) error {
 }
 
 func (n *Nomad) RegisterJob(job *api.Job) error {
-	res, _, err := n.client.Jobs().Register(job, nil)
+	q_reg := api.WriteOptions{}
+	q_reg.WithContext(n.ctx)
+	res, _, err := n.client.Jobs().Register(job, &q_reg)
 	if err != nil {
 		return err
 	}
 
 	for {
-		eval, _, err := n.client.Evaluations().Info(res.EvalID, nil)
+		q_info := api.QueryOptions{}
+		q_info.WithContext(n.ctx)
+		eval, _, err := n.client.Evaluations().Info(res.EvalID, &q_info)
 		if err != nil {
 			return err
 		}
@@ -98,7 +111,9 @@ func (n *Nomad) RegisterJob(job *api.Job) error {
 func (n *Nomad) WaitForAllocation(jobID string) (*api.Allocation, bool, error) {
 	var id string
 	for {
-		allocs, _, err := n.client.Jobs().Allocations(jobID, false, nil)
+		q := api.QueryOptions{}
+		q.WithContext(n.ctx)
+		allocs, _, err := n.client.Jobs().Allocations(jobID, false, &q)
 		if err != nil {
 			return nil, true, err
 		}
@@ -138,7 +153,9 @@ func (n *Nomad) WaitForAllocation(jobID string) (*api.Allocation, bool, error) {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	alloc, _, err := n.client.Allocations().Info(id, nil)
+	q := api.QueryOptions{}
+	q.WithContext(n.ctx)
+	alloc, _, err := n.client.Allocations().Info(id, &q)
 	if err != nil {
 		return nil, true, err
 	}
@@ -146,7 +163,9 @@ func (n *Nomad) WaitForAllocation(jobID string) (*api.Allocation, bool, error) {
 }
 
 func (n *Nomad) GetTaskLogs(alloc *api.Allocation, task string, std string) (string, error) {
-	reader, err := n.client.AllocFS().Cat(alloc, "alloc/logs/"+task+"."+std+".0", nil)
+	q := api.QueryOptions{}
+	q.WithContext(n.ctx)
+	reader, err := n.client.AllocFS().Cat(alloc, "alloc/logs/"+task+"."+std+".0", &q)
 	if err != nil {
 		return "", err
 	}
@@ -159,10 +178,12 @@ func (n *Nomad) GetTaskLogs(alloc *api.Allocation, task string, std string) (str
 }
 
 func (n *Nomad) Exec(alloc *api.Allocation, task string, command []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
-	return n.client.Allocations().Exec(context.TODO(), alloc, task, false, command, stdin, stdout, stderr, nil, nil)
+	return n.client.Allocations().Exec(n.ctx, alloc, task, false, command, stdin, stdout, stderr, nil, nil)
 }
 
 func (n *Nomad) DeregisterJob(jobID string) error {
-	_, _, err := n.client.Jobs().Deregister(jobID, false, nil)
+	q := api.WriteOptions{}
+	q.WithContext(n.ctx)
+	_, _, err := n.client.Jobs().Deregister(jobID, false, &q) // TODO: purge
 	return err
 }

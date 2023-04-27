@@ -21,7 +21,11 @@ job {
 
     config = <<-EOT
       image = "{{.Image}}"
+      {{if gt (len .Entrypoint) 0 -}}
+      entrypoint = {{.Entrypoint | hcl}}
+      {{else -}}
       command = "sh"
+      {{end -}}
       args = ["{{.ExecScript}}"]
       {{with .Auth -}}
       auth = {
@@ -54,11 +58,9 @@ job {
     config = <<-EOT
       image = "{{.Service.Name}}"
       entrypoint = {{.Service.Entrypoint | hcl}}
-      {{with .Service.Command -}}
-      {{if gt (len .) 0 -}}
-      command = "{{index . 0}}"
-      args = {{slice . 1 | hcl}}
-      {{end -}}
+      {{if gt (len .Service.Command) 0 -}}
+      command = "{{index .Service.Command 0}}"
+      args = {{slice (.Service.Command | deref) 1 | hcl}}
       {{end -}}
       {{with .Auth -}}
       auth = {

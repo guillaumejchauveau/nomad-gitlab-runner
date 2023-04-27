@@ -5,7 +5,10 @@ import (
 	"giruno/internals"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -20,15 +23,15 @@ var cleanupCmd = &cobra.Command{
 			return fmt.Errorf("no JOB_ENV_ID set")
 		}
 
-		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
+		signal.Ignore(syscall.SIGTERM)
 
-		log.Println("Creating client...")
+		log.Println("Cleaning up environment")
 		nomad, err := internals.NewNomad(Config)
 		if err != nil {
 			return err
 		}
 
-		log.Print("Waiting for job allocation... ")
+		log.Println("Waiting for job allocation")
 		alloc, dead, err := nomad.WaitForAllocation(id)
 		if err != nil {
 			return err
@@ -36,15 +39,26 @@ var cleanupCmd = &cobra.Command{
 		log.Println(alloc.ID)
 
 		if !dead {
-			log.Println("Stopping allocation...")
+			log.Println("Stopping allocation")
+			var shell string
+			for {
+				time.Sleep(time.Second)
+				logs, err := nomad.GetTaskLogs(alloc, "job", "stdout")
+				if err != nil {
+					return err
+				}
+				if logs != "" {
+					shell = strings.Trim(logs, " \n\t\r")
+					break
+				}
+			}
+			log.Println("Using job shell " + shell)
 			nomad.Exec(alloc, "job", []string{
-				"sh",
-				"-c",
-				"echo > /tmp/stop_task",
-			}, strings.NewReader(""), os.Stdout, os.Stderr)
+				shell,
+			}, strings.NewReader("echo > /tmp/giruno/stop_task"), os.Stdout, os.Stderr)
 		}
 
-		log.Println("Deregistering job...")
+		log.Println("Deregistering job")
 		return nomad.DeregisterJob(id)
 	},
 }

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"giruno/gitlab"
 	"giruno/internals"
@@ -34,8 +36,9 @@ else
 	echo "Could not find compatible shell"
 	exit 1
 fi
-mkfifo /tmp/stop_task
-read _ < /tmp/stop_task
+mkdir -p /tmp/giruno
+mkfifo /tmp/giruno/stop_task
+read _ < /tmp/giruno/stop_task
 `
 
 var prepareCmd = &cobra.Command{
@@ -48,6 +51,17 @@ var prepareCmd = &cobra.Command{
 			return fmt.Errorf("no JOB_ENV_ID set")
 		}
 
+		response_file_path := os.Getenv("JOB_RESPONSE_FILE")
+		response_file_b, err := os.ReadFile(response_file_path)
+		if err != nil {
+			return fmt.Errorf("cannot read JOB_RESPONSE_FILE: %w", err)
+		}
+		response_file := map[string]json.RawMessage{}
+		err = json.Unmarshal(response_file_b, &response_file)
+		if err != nil {
+			return fmt.Errorf("cannot unmarshal JOB_RESPONSE_FILE: %w", err)
+		}
+
 		// Extract job parameters from GitLab Runner-provided environment.
 
 		image := os.Getenv("CUSTOM_ENV_CI_JOB_IMAGE")
@@ -58,7 +72,6 @@ var prepareCmd = &cobra.Command{
 		services := []gitlab.JobService{}
 		env_services := os.Getenv("CUSTOM_ENV_CI_JOB_SERVICES")
 		if env_services != "" {
-			log.Println("With services")
 			err := json.Unmarshal([]byte(env_services), &services)
 			if err != nil {
 				return err
@@ -68,7 +81,6 @@ var prepareCmd = &cobra.Command{
 		registry_auths := map[string]*internals.RegistryAuth{}
 		env_registry := os.Getenv("CUSTOM_ENV_CI_REGISTRY")
 		if env_registry != "" {
-			log.Println("With CI registry auth")
 			user := os.Getenv("CUSTOM_ENV_CI_REGISTRY_USER")
 			password := os.Getenv("CUSTOM_ENV_CI_REGISTRY_PASSWORD")
 			if user == "" || password == "" {
@@ -81,7 +93,6 @@ var prepareCmd = &cobra.Command{
 		}
 		env_dependency_proxy := os.Getenv("CUSTOM_ENV_CI_DEPENDENCY_PROXY_SERVER")
 		if env_dependency_proxy != "" {
-			log.Println("With Dependency Proxy auth")
 			user := os.Getenv("CUSTOM_ENV_CI_DEPENDENCY_PROXY_USER")
 			password := os.Getenv("CUSTOM_ENV_CI_DEPENDENCY_PROXY_PASSWORD")
 			if user == "" || password == "" {
@@ -95,7 +106,6 @@ var prepareCmd = &cobra.Command{
 
 		env_docker_auth_config := os.Getenv("CUSTOM_ENV_DOCKER_AUTH_CONFIG")
 		if env_docker_auth_config != "" {
-			log.Println("With Docker auth config")
 			var docker_auth_config gitlab.DockerAuthConfig
 			err := json.Unmarshal([]byte(env_docker_auth_config), &docker_auth_config)
 			if err != nil {
@@ -117,7 +127,7 @@ var prepareCmd = &cobra.Command{
 			}
 		}
 
-		// Create Nomad job.
+		// Create Nomad job specification.
 		// TODO: pull policy ? id_tokens ? secrets ?
 
 		command_file_template := api.Template{
@@ -130,8 +140,19 @@ var prepareCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		job_task_image_raw, ok := response_file["image"]
+		if !ok {
+			return fmt.Errorf("cannot extract image data from response file")
+		}
+
+		job_task_image := gitlab.JobResponseImage{}
+		err = json.Unmarshal(job_task_image_raw, &job_task_image)
+		if err != nil {
+			return fmt.Errorf("cannot unmarshal image data from response file: %w", err)
+		}
 		job_task, err := job_task_type.CreateNomadTask(map[string]interface{}{
 			"Image":      image,
+			"Entrypoint": job_task_image.Entrypoint,
 			"ExecScript": "${NOMAD_TASK_DIR}/exec_script.sh",
 			"Auth":       registry_auths[internals.DockerImageDomain(image)],
 		})
@@ -183,7 +204,7 @@ var prepareCmd = &cobra.Command{
 			},
 		}
 
-		// Add additionnal task for each CI service.
+		// Add additionnal tasks for each CI service.
 		service_task_type, err := Config.Job.GetTaskType("service")
 		if err != nil {
 			return err
@@ -221,35 +242,40 @@ var prepareCmd = &cobra.Command{
 			}
 		}
 
-		// TODO: make cancellable https://docs.gitlab.com/runner/executors/custom.html#terminating-and-killing-executables
-
-		log.Println("Creating client...")
+		log.Println("Preparing environment")
 		nomad, err := internals.NewNomad(Config)
 		if err != nil {
 			return err
 		}
 
-		log.Println("Validating job...")
+		c := make(chan os.Signal, 1)
+		go func() {
+			<-c
+			log.Println("Received SIGTERM, exiting")
+			nomad.Cancel()
+		}()
+		signal.Notify(c, syscall.SIGTERM)
+
+		log.Println("Validating job")
 		err = nomad.ValidateJob(&job_spec)
 		if err != nil {
 			return err
 		}
 
-		log.Println("Registering job...")
+		log.Println("Registering job")
 		err = nomad.RegisterJob(&job_spec)
 		if err != nil {
 			return err
 		}
 
-		log.Print("Waiting for job allocation... ")
-		alloc, dead, err := nomad.WaitForAllocation(id)
+		log.Println("Waiting for job allocation")
+		_, dead, err := nomad.WaitForAllocation(id)
 		if dead {
 			return fmt.Errorf("allocation is dead")
 		}
 		if err != nil {
 			return err
 		}
-		log.Println(alloc.ID)
 		return nil
 	},
 }

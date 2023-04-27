@@ -120,6 +120,9 @@ func (t *TaskType) DriverConfig(task_data map[string]interface{}) (map[string]in
 	tmpl, err := template.
 		New("driver_config").
 		Funcs(template.FuncMap{
+			"deref": func(v *[]string) []string {
+				return *v
+			},
 			"hcl": func(v interface{}) (string, error) {
 				valTy, err := gocty.ImpliedType(v)
 				if err != nil {

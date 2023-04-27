@@ -11,14 +11,24 @@ func (e BuildError) Error() string {
 }
 
 type JobService struct {
-	Name       string   `json:"name"`
-	Alias      string   `json:"alias"`
-	Entrypoint []string `json:"entrypoint"`
-	Command    []string `json:"command"`
+	Name       string    `json:"name"`
+	Alias      string    `json:"alias"`
+	Entrypoint *[]string `json:"entrypoint"`
+	Command    *[]string `json:"command"`
 }
 
 type DockerAuthConfig struct {
 	Auths map[string]string `json:"auths"`
+}
+
+type JobResponseImage struct {
+	Name         string           `json:"name"`
+	Alias        string           `json:"alias,omitempty"`
+	Command      []string         `json:"command,omitempty"`
+	Entrypoint   []string         `json:"entrypoint,omitempty"`
+	Ports        []map[string]any `json:"ports,omitempty"`
+	Variables    []map[string]any `json:"variables,omitempty"`
+	PullPolicies []string         `json:"pull_policy,omitempty"`
 }
 
 // https://gitlab.com/gitlab-org/gitlab-runner/blob/main/executors/custom/api/config.go
